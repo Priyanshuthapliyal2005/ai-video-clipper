@@ -1,0 +1,10 @@
+__pycache__/
+venv/
+venv/bin/
+venv/include/
+venv/lib/
+venv/pyvenv.cfg
+mi.mp4
+mi5.mp4
+therapy.mp4
+therapy5.mp4
