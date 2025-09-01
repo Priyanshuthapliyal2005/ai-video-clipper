@@ -1,9 +1,11 @@
+## Trigger Modal rebuild
 tqdm
 torch
 opencv-python
 ffmpegcv
 numpy
 python_speech_features 
+boto3
 scipy
 scenedetect
 scikit-learn
@@ -15,6 +17,5 @@ accelerate
 datasets
 google-genai
 pysubs2
-boto3
 fastapi[standard]
 whisperx
