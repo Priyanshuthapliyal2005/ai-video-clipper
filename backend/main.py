@@ -1,21 +1,25 @@
+import glob
+import json
+import pathlib
+import pickle
+import shutil
+import subprocess
+import time
+import uuid
+import boto3
+import cv2
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import modal
 import numpy as np
 from pydantic import BaseModel
 import os
-import shutil
-import json 
-import glob 
-import uuid
-import pathlib
-import subprocess
-import time
 from google import genai
-import cv2
-import pickle
-import boto3
+
+import pysubs2
 from tqdm import tqdm
+import whisperx
+
 
 class ProcessVideoRequest(BaseModel):
     s3_key: str
@@ -154,6 +158,93 @@ def create_vertical_video(tracks,scores,pyframes_path, pyavi_path, audio_path , 
         
         subprocess.run(ffmpeg_command, shell = True , check =True , text = True)
 
+def create_subtitles_with_ffmpeg(transcript_segments: list, clip_start: float, clip_end: float, clip_video_path: str, output_path: str, max_words: int = 5):
+    temp_dir = os.path.dirname(output_path)
+    subtitle_path = os.path.join(temp_dir, "temp_subtitles.ass")
+
+    clip_segments = [segment for segment in transcript_segments
+                     if segment.get("start") is not None
+                     and segment.get("end") is not None
+                     and segment.get("end") > clip_start
+                     and segment.get("start") < clip_end
+                     ]
+
+    subtitles = []
+    current_words = []
+    current_start = None
+    current_end = None
+
+    for segment in clip_segments:
+        word = segment.get("word", "").strip()
+        seg_start = segment.get("start")
+        seg_end = segment.get("end")
+
+        if not word or seg_start is None or seg_end is None:
+            continue
+
+        start_rel = max(0.0, seg_start - clip_start)
+        end_rel = max(0.0, seg_end - clip_start)
+
+        if end_rel <= 0:
+            continue
+
+        if not current_words:
+            current_start = start_rel
+            current_end = end_rel
+            current_words = [word]
+        elif len(current_words) >= max_words:
+            subtitles.append(
+                (current_start, current_end, ' '.join(current_words)))
+            current_words = [word]
+            current_start = start_rel
+            current_end = end_rel
+        else:
+            current_words.append(word)
+            current_end = end_rel
+
+    if current_words:
+        subtitles.append(
+            (current_start, current_end, ' '.join(current_words)))
+
+    subs = pysubs2.SSAFile()
+
+    subs.info["WrapStyle"] = 0
+    subs.info["ScaledBorderAndShadow"] = "yes"
+    subs.info["PlayResX"] = 1080
+    subs.info["PlayResY"] = 1920
+    subs.info["ScriptType"] = "v4.00+"
+
+    style_name = "Default"
+    new_style = pysubs2.SSAStyle()
+    new_style.fontname = "Anton"
+    new_style.fontsize = 140
+    new_style.primarycolor = pysubs2.Color(255, 255, 255)
+    new_style.outline = 2.0
+    new_style.shadow = 2.0
+    new_style.shadowcolor = pysubs2.Color(0, 0, 0, 128)
+    new_style.alignment = 2
+    new_style.marginl = 50
+    new_style.marginr = 50
+    new_style.marginv = 50
+    new_style.spacing = 0.0
+
+    subs.styles[style_name] = new_style
+
+    for i, (start, end, text) in enumerate(subtitles):
+        start_time = pysubs2.make_time(s=start)
+        end_time = pysubs2.make_time(s=end)
+        line = pysubs2.SSAEvent(
+            start=start_time, end=end_time, text=text, style=style_name)
+        subs.events.append(line)
+
+    subs.save(subtitle_path)
+
+    ffmpeg_cmd = (f"ffmpeg -y -i {clip_video_path} -vf \"ass={subtitle_path}\" "
+                  f"-c:v h264 -preset fast -crf 23 {output_path}")
+
+    subprocess.run(ffmpeg_cmd, shell=True, check=True)
+   
+
 def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_time: float, end_time: float, clip_index: int, transcript_segments: list):
     clip_name = f"clip_{clip_index}"
     # uuid/originalVideo.mp4
@@ -217,8 +308,11 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
     
     print(f"Clip {clip_index} vertical video creation time: {cvv_end_time - cvv_start_time: .2f} seconds")
     
+    create_subtitles_with_ffmpeg(transcript_segments, start_time,
+                                 end_time, vertical_mp4_path, subtitle_output_path, max_words=5)
+    
     s3_client = boto3.client("s3")
-    s3_client.upload_file(vertical_mp4_path,"ai-yt-clips", output_s3_key)
+    s3_client.upload_file(subtitle_output_path,"ai-yt-clips", output_s3_key)
     
     
 @app.cls(gpu="L40S",timeout=900,retries=0,scaledown_window=20 , secrets=[modal.Secret.from_name("ai-podcast-clipper-secret")] , volumes={mount_path: volume})
@@ -351,7 +445,7 @@ class AiPodcastClipper:
         print(clip_moments)
         
         #3. process clips
-        for index , moment in enumerate(clip_moments[:1]):
+        for index , moment in enumerate(clip_moments[:3]):
             if "start" in moment and "end" in moment:
                 print("Processing Clip" + str(index) + " from " + 
                       str(moment["start"]) + " to " + str(moment["end"]))
