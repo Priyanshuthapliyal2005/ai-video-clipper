@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { Toaster } from "~/components/ui/sonner";
 import NavHeader from "~/components/nav-header";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
     return <div className="flex min-h-screen flex-col">
         <NavHeader credits= {user.credits} email={user.email}/>
         <main className="container mx-auto flex-1 py-6">{children}</main>
+        <Toaster />
     </div>
 }
 
