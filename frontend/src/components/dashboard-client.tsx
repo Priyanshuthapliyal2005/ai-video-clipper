@@ -1,10 +1,10 @@
 "use client";
 
+import Dropzone, { type DropzoneState } from "shadcn-dropzone";
 import type { Clip } from "@prisma/client";
 import Link from "next/link";
 import { Button } from "./ui/button";
-import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
-import { TabsContent } from "@radix-ui/react-tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   Card,
   CardContent,
@@ -12,15 +12,22 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
-import Dropzone, {
-  type DropzoneState,
-  type DropzoneProps,
-} from "shadcn-dropzone";
 import { Loader2, UploadCloud } from "lucide-react";
 import { useState } from "react";
 import { generateUploadUrl } from "~/action/s3";
 import { toast } from "sonner";
 import { processVideo } from "~/action/generation";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { Badge } from "./ui/badge";
+import { useRouter } from "next/navigation";
+import { ClipDisplay } from "./clip-display";
 
 export function DashboardClient({
   uploadedFiles,
@@ -31,22 +38,28 @@ export function DashboardClient({
     s3Key: string;
     filename: string;
     status: string;
-    clipCount: number;
+    clipsCount: number;
     createdAt: Date;
   }[];
   clips: Clip[];
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 600);
+  };
 
   const handleDrop = (acceptedFiles: File[]) => {
     setFiles(acceptedFiles);
   };
 
   const handleUpload = async () => {
-    if (files.length === 0) {
-      return;
-    }
+    if (files.length === 0) return;
 
     const file = files[0]!;
     setUploading(true);
@@ -57,9 +70,9 @@ export function DashboardClient({
         contentType: file.type,
       });
 
-      if (!success) throw new Error("Failed to generate upload URL");
+      if (!success) throw new Error("Failed to get upload URL");
 
-      const uploadedResponse = await fetch(signedUrl, {
+      const uploadResponse = await fetch(signedUrl, {
         method: "PUT",
         body: file,
         headers: {
@@ -67,13 +80,10 @@ export function DashboardClient({
         },
       });
 
-      if (!uploadedResponse.ok)
-        throw new Error(
-          `Upload files with status : ${uploadedResponse.status}`,
-        );
+      if (!uploadResponse.ok)
+        throw new Error(`Upload filed with status: ${uploadResponse.status}`);
 
       await processVideo(uploadedFileId);
-      
 
       setFiles([]);
 
@@ -103,14 +113,15 @@ export function DashboardClient({
             Upload your podcast and get AI-generated clips instantly
           </p>
         </div>
-        <Link href="/dashbaord/billing">
+        <Link href="/dashboard/billing">
           <Button>Buy Credits</Button>
         </Link>
       </div>
+
       <Tabs defaultValue="upload">
         <TabsList>
           <TabsTrigger value="upload">Upload</TabsTrigger>
-          <TabsTrigger value="my-clips">My-Clips</TabsTrigger>
+          <TabsTrigger value="my-clips">My Clips</TabsTrigger>
         </TabsList>
 
         <TabsContent value="upload">
@@ -118,7 +129,7 @@ export function DashboardClient({
             <CardHeader>
               <CardTitle>Upload Podcast</CardTitle>
               <CardDescription>
-                Upload your audio or video file to generate clips.
+                Upload your audio or video file to generate clips
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -127,6 +138,7 @@ export function DashboardClient({
                 accept={{ "video/mp4": [".mp4"] }}
                 maxSize={500 * 1024 * 1024}
                 disabled={uploading}
+                maxFiles={1}
               >
                 {(dropzone: DropzoneState) => (
                   <>
@@ -134,7 +146,7 @@ export function DashboardClient({
                       <UploadCloud className="text-muted-foreground h-12 w-12" />
                       <p className="font-medium">Drag and drop your file</p>
                       <p className="text-muted-foreground text-sm">
-                        or Click to browse (Mp4 up to 500MB)
+                        or click to browse (MP4 up to 500MB)
                       </p>
                       <Button
                         className="cursor-pointer"
@@ -149,13 +161,15 @@ export function DashboardClient({
                 )}
               </Dropzone>
 
-              <div className="flex items-start justify-between">
+              <div className="mt-2 flex items-start justify-between">
                 <div>
                   {files.length > 0 && (
                     <div className="space-y-1 text-sm">
-                      <p className="font-medium">Selected File: </p>
+                      <p className="font-medium">Selected file:</p>
                       {files.map((file) => (
-                        <p className="text-muted-foreground">{file.name}</p>
+                        <p key={file.name} className="text-muted-foreground">
+                          {file.name}
+                        </p>
                       ))}
                     </div>
                   )}
@@ -174,10 +188,96 @@ export function DashboardClient({
                   )}
                 </Button>
               </div>
+
+              {uploadedFiles.length > 0 && (
+                <div className="pt-6">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-md mb-2 font-medium">Queue status</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                    >
+                      {refreshing && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="max-h-[300px] overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>File</TableHead>
+                          <TableHead>Uploaded</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Clips created</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {uploadedFiles.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="max-w-xs truncate font-medium">
+                              {item.filename}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {new Date(item.createdAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              {item.status === "queued" && (
+                                <Badge variant="outline">Queued</Badge>
+                              )}
+                              {item.status === "processing" && (
+                                <Badge variant="outline">Processing</Badge>
+                              )}
+                              {item.status === "processed" && (
+                                <Badge variant="outline">Processed</Badge>
+                              )}
+                              {item.status === "no credits" && (
+                                <Badge variant="destructive">No credits</Badge>
+                              )}
+                              {item.status === "failed" && (
+                                <Badge variant="destructive">Failed</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {item.clipsCount > 0 ? (
+                                <span>
+                                  {item.clipsCount} clip
+                                  {item.clipsCount !== 1 ? "s" : ""}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  No clips yet
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="upload"></TabsContent>
+
+        <TabsContent value="my-clips">
+          <Card>
+            <CardHeader>
+              <CardTitle>My Clips</CardTitle>
+              <CardDescription>
+                View and manage your generated clips here. Processing may take a
+                few minuntes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ClipDisplay clips={clips} />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
