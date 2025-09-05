@@ -274,7 +274,7 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
                    f"{clip_segment_path}")
     subprocess.run(cut_command, shell= True, check=True, capture_output=True,text=True)
     
-    extract_cmd = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 44100 -ac 1 {audio_path}"
+    extract_cmd = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
     subprocess.run(extract_cmd, shell=True, check=True, capture_output=True)
 
     shutil.copy(clip_segment_path, base_dir / f"{clip_name}.mp4")
@@ -343,14 +343,14 @@ class AiPodcastClipper:
         import whisperx
 
         audio_path = base_dir / "audio.wav"
-        extract_cmd = f"ffmpeg -i {video_path} -vn -acodec pcm_s16le -ar 44100 -ac 1 {audio_path}"
+        extract_cmd = f"ffmpeg -i {video_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
         subprocess.run(extract_cmd, shell=True, check=True, capture_output=True)
 
         print("Starting transcriptions with whisperX...")
         start_time = time.time()
 
         audio = whisperx.load_audio(str(audio_path))
-        result = self.whisperx_model.transcribe(audio, batch_size=16)
+        result = self.whisperx_model.transcribe(audio, batch_size=8)
 
         result = whisperx.align(
             result["segments"],
@@ -380,7 +380,8 @@ class AiPodcastClipper:
         return json.dumps(segments)
     
     def identify_moments(self, transcript: dict):
-        response = self.gemini_client.models.generate_content(model="gemini-2.5-flash-lite", contents="""
+        try:
+            response = self.gemini_client.models.generate_content(model="gemini-2.5-flash", contents="""
     This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
 
     Your task is to find and extract stories, or question and their corresponding answers from the transcript.
@@ -401,8 +402,19 @@ class AiPodcastClipper:
     If there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.
 
     The transcript is as follows:\n\n""" + str(transcript))
-        print(f"Identified moments response: ${response.text}")
-        return response.text
+            
+            print(f"Identified moments response: {response.text if response and response.text else 'None or empty response'}")
+            
+            if not response or not response.text:
+                print("Warning: Gemini API returned None or empty response, returning empty clips list")
+                return "[]"
+            
+            return response.text
+            
+        except Exception as e:
+            print(f"Error calling Gemini API: {e}")
+            print("Returning empty clips list as fallback")
+            return "[]"
     
     @modal.fastapi_endpoint(method="POST")
     def process_video(self, request: ProcessVideoRequest, token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
@@ -431,13 +443,24 @@ class AiPodcastClipper:
         print("Identifying clip moments")
         identified_moments_raw = self.identify_moments(transcript_segments)
         
+        # Handle case where identified_moments_raw is None or empty
+        if not identified_moments_raw:
+            print("No moments identified, skipping clip processing")
+            return {"message": "No clips were generated - no valid moments found"}
+        
         cleaned_json_string = identified_moments_raw.strip()
         if cleaned_json_string.startswith("```json"):
             cleaned_json_string = cleaned_json_string[len("```json"):].strip()
         if cleaned_json_string.endswith("```"):
             cleaned_json_string = cleaned_json_string[:-len("```")].strip()
         
-        clip_moments = json.loads(cleaned_json_string)
+        try:
+            clip_moments = json.loads(cleaned_json_string)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            print(f"Raw response: {cleaned_json_string}")
+            return {"message": "Error parsing AI response for clip moments"}
+            
         if not clip_moments or not isinstance (clip_moments, list):
             print("Error : Identified moments is not a list")
             clip_moments=[]
@@ -445,7 +468,7 @@ class AiPodcastClipper:
         print(clip_moments)
         
         #3. process clips
-        for index , moment in enumerate(clip_moments[:1]):
+        for index , moment in enumerate(clip_moments[:5]):
             if "start" in moment and "end" in moment:
                 print("Processing Clip" + str(index) + " from " + 
                       str(moment["start"]) + " to " + str(moment["end"]))
@@ -464,7 +487,7 @@ def main():
     url = ai_podcast_clipper.process_video.get_web_url()
     
     payload = {
-        "s3_key": "test1/therapy5.mp4"
+        "s3_key": "66d9a577-b80c-4a9e-abcb-9591e397f88d/original.mp4"
     }
     
     headers = {
