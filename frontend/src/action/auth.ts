@@ -4,6 +4,7 @@ import { hashPassword } from "~/lib/auth";
 import { signupSchema, type SignupFormValues } from "~/schemas/auth";
 import { db } from "~/server/db";
 import Stripe from "stripe";
+import { env } from "process";
 
 type SignupResult = {
     success: boolean;
@@ -33,17 +34,20 @@ export async function signUp(data: SignupFormValues): Promise<SignupResult> {
 
         const hashedPassword = await hashPassword(password);
         
-        // const stripe = new Stripe("Todo: Stripe Key");
+        if (!env.STRIPE_SECRET_KEY) {
+            throw new Error("STRIPE_SECRET_KEY is not defined in environment variables.");
+        }
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY);
 
-        // const stripeCustomer = await stripe.customers.create({
-        //     email: email.toLocaleLowerCase(),
-        // })
+        const stripeCustomer = await stripe.customers.create({
+            email: email.toLocaleLowerCase(),
+        })
 
         const newUser = await db.user.create({
             data: {
                 email,
                 password: hashedPassword,
-                // stripeCustomerId: stripeCustomer.id
+                stripeCustomerId: stripeCustomer.id
             },
         });
         return {
