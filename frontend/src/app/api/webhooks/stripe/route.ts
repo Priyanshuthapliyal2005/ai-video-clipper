@@ -1,5 +1,3 @@
-// stripe listen --forward-to localhost:3000/api/webhooks/stripe
-
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { env } from "~/env";
@@ -21,7 +19,7 @@ export async function POST(req: Request) {
     try {
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (error) {
-      console.error("Webhook signature verification failed", error);
+      console.error("Webhook signature verification failed:", error);
       return new NextResponse("Webhook signature verification failed", {
         status: 400,
       });
@@ -31,12 +29,25 @@ export async function POST(req: Request) {
       const session = event.data.object;
       const customerId = session.customer as string;
 
-      const retreivedSession = await stripe.checkout.sessions.retrieve(
-        session.id,
-        { expand: ["line_items"] },
-      );
+      // Only process if payment is actually paid
+      if (session.payment_status !== "paid") {
+        return new NextResponse(null, { status: 200 });
+      }
 
-      const lineItems = retreivedSession.line_items;
+      let retreivedSession;
+      let lineItems;
+      
+      try {
+        retreivedSession = await stripe.checkout.sessions.retrieve(
+          session.id,
+          { expand: ["line_items", "customer"] },
+        );
+        lineItems = retreivedSession.line_items;
+      } catch (stripeError) {
+        console.error("Failed to retrieve session from Stripe:", stripeError);
+        return new NextResponse("Session not found", { status: 404 });
+      }
+      
       if (lineItems && lineItems.data.length > 0) {
         const priceId = lineItems.data[0]?.price?.id ?? undefined;
 
@@ -51,14 +62,57 @@ export async function POST(req: Request) {
             creditsToAdd = 500;
           }
 
-          await db.user.update({
-            where: { stripeCustomerId: customerId },
-            data: {
-              credits: {
-                increment: creditsToAdd,
-              },
-            },
-          });
+          if (creditsToAdd > 0) {
+            try {
+              // First, check if user exists
+              const existingUser = await db.user.findUnique({
+                where: { stripeCustomerId: customerId }
+              });
+              
+              if (!existingUser) {
+                // Try to find user by customer email if available
+                const customerData = retreivedSession.customer;
+                if (customerData && typeof customerData === 'object' && 'email' in customerData) {
+                  const customerEmail = customerData.email as string;
+                  
+                  const userByEmail = await db.user.findUnique({
+                    where: { email: customerEmail }
+                  });
+                  
+                  if (userByEmail) {
+                    // Update the user with the stripe customer ID
+                    await db.user.update({
+                      where: { email: customerEmail },
+                      data: { stripeCustomerId: customerId }
+                    });
+                    
+                    // Add credits to the user
+                    await db.user.update({
+                      where: { email: customerEmail },
+                      data: {
+                        credits: {
+                          increment: creditsToAdd,
+                        },
+                      },
+                    });
+                  }
+                }
+              } else {
+                // User found, add credits
+                await db.user.update({
+                  where: { stripeCustomerId: customerId },
+                  data: {
+                    credits: {
+                      increment: creditsToAdd,
+                    },
+                  },
+                });
+              }
+            } catch (dbError) {
+              console.error("Database error:", dbError);
+              // Don't return error to Stripe, log it for investigation
+            }
+          }
         }
       }
     }
