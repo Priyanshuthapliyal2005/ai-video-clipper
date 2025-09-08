@@ -11,10 +11,10 @@ import {
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
-import { z } from "zod";
+// zod import not used in this component
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useState } from "reaczzt";
 import Link from "next/link";
 import { signupSchema, type SignupFormValues } from "~/schemas/auth";
 import { signUp } from "~/action/auth";
@@ -60,7 +60,8 @@ export function SignupForm({
         router.push("/dashboard");
       }
     } catch (error) {
-      setError("An unexpected error occured");
+  console.error(error);
+  setError("An unexpected error occured");
     } finally {
       setIsSubmitting(false);
     }

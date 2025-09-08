@@ -92,7 +92,8 @@ export function DashboardClient({
           "Your video has been scheduled for processing. Check the status below.",
         duration: 5000,
       });
-    } catch (error) {
+    } catch (err) {
+      console.error(err);
       toast.error("Upload failed", {
         description:
           "There was a problem uploading your video. Please try again.",
@@ -140,7 +141,7 @@ export function DashboardClient({
                 disabled={uploading}
                 maxFiles={1}
               >
-                {(dropzone: DropzoneState) => (
+                {(_: DropzoneState) => (
                   <>
                     <div className="flex flex-col items-center justify-center space-y-4 rounded-lg p-10 text-center">
                       <UploadCloud className="text-muted-foreground h-12 w-12" />

@@ -11,18 +11,13 @@ import {
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
-import { z } from "zod";
+// zod import not used here
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import Link from "next/link";
-import {
-  loginSchema,
-  signupSchema,
-  type LoginFormValues,
-  type SignupFormValues,
-} from "~/schemas/auth";
-import { signUp } from "~/action/auth";
+import { loginSchema, type LoginFormValues } from "~/schemas/auth";
+// signUp not used in login form
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -57,7 +52,8 @@ export function LoginForm({
         router.push("/dashboard");
       }
     } catch (error) {
-      setError("An unexpected error occured");
+  console.error(error);
+  setError("An unexpected error occured");
     } finally {
       setIsSubmitting(false);
     }

@@ -73,7 +73,8 @@ export async function getClipPlayUrl(
     });
 
     return { succes: true, url: signedUrl };
-  } catch (error) {
+  } catch (err) {
+    console.error(err);
     return { succes: false, error: "Failed to generate play URL." };
   }
 }

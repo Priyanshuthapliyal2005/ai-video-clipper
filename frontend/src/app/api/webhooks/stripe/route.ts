@@ -26,8 +26,24 @@ export async function POST(req: Request) {
     }
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      const customerId = session.customer as string;
+  const session = event.data.object;
+
+      // session.customer can be a string (customer id) or an expanded Customer object.
+      let customerId: string | undefined;
+      if (typeof session.customer === "string") {
+        customerId = session.customer;
+      } else if (
+        session.customer &&
+        typeof session.customer === "object" &&
+        "id" in session.customer
+      ) {
+        customerId = session.customer.id;
+      }
+
+      if (!customerId) {
+        // No customer id available
+        return new NextResponse(null, { status: 200 });
+      }
 
       // Only process if payment is actually paid
       if (session.payment_status !== "paid") {
@@ -72,8 +88,8 @@ export async function POST(req: Request) {
               if (!existingUser) {
                 // Try to find user by customer email if available
                 const customerData = retreivedSession.customer;
-                if (customerData && typeof customerData === 'object' && 'email' in customerData) {
-                  const customerEmail = customerData.email as string;
+                if (customerData && typeof customerData === "object" && "email" in customerData) {
+                  const customerEmail = customerData.email!;
                   
                   const userByEmail = await db.user.findUnique({
                     where: { email: customerEmail }

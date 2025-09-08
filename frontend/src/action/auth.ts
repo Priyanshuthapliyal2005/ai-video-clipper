@@ -16,7 +16,7 @@ export async function signUp(data: SignupFormValues): Promise<SignupResult> {
     if(!validationResult.success){
         return {
             success: false,
-            error: validationResult.error.issues[0]?.message || "Invalid Input",
+            error: validationResult.error.issues[0]?.message ?? "Invalid Input",
         };
     }
     
@@ -43,20 +43,21 @@ export async function signUp(data: SignupFormValues): Promise<SignupResult> {
             email: email.toLocaleLowerCase(),
         })
 
-        const newUser = await db.user.create({
+        await db.user.create({
             data: {
                 email,
                 password: hashedPassword,
-                stripeCustomerId: stripeCustomer.id
+                stripeCustomerId: stripeCustomer.id,
             },
         });
         return {
             success: true,
         };
-    } catch(error){
+    } catch (error) {
+        console.error(error);
         return {
             success: false,
-            error: "An error occur during signup."
-        }
+            error: "An error occur during signup.",
+        };
     }
 }
