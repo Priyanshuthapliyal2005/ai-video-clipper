@@ -14,7 +14,7 @@ import { Button } from "./ui/button";
 // zod import not used in this component
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "reaczzt";
+import { useState } from "react";
 import Link from "next/link";
 import { signupSchema, type SignupFormValues } from "~/schemas/auth";
 import { signUp } from "~/action/auth";
