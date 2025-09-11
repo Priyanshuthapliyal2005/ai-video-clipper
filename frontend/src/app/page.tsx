@@ -3,6 +3,7 @@ import { Button } from "~/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import RetroGrid from "~/components/ui/retro-grid";
+import LandingNav from "~/components/landing-nav";
 
 const fadeUpVariants = {
   initial: { opacity: 0, y: 20 },
@@ -11,7 +12,8 @@ const fadeUpVariants = {
 
 export default function App() {
   return (
-    <main className="min-h-screen max-w-5xl mx-auto flex flex-col items-center justify-center px-4 md:px-6 lg:px-8 pt-32 pb-12 gap-16">
+    <main className="min-h-screen max-w-5xl mx-auto flex flex-col items-center justify-center px-4 md:px-6 lg:px-8 pt-8 pb-12 gap-16">
+      <LandingNav />
       <div className="text-center flex flex-col gap-6 max-w-2xl mx-auto">
         <div className="text-center flex flex-col gap-2">
           <motion.h1
@@ -48,7 +50,7 @@ export default function App() {
         </motion.div>
       </div>
       
-      <video
+  <video
         autoPlay
         muted
         loop
