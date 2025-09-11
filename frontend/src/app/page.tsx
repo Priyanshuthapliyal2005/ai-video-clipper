@@ -21,7 +21,7 @@ export default function App() {
             animate="animate"
             transition={{ duration: 0.5 }}
           >
-            Snip Clips. Make Bangers.
+            Ship Clips. Make Nerd.
           </motion.h1>
 
           <motion.p
@@ -54,7 +54,7 @@ export default function App() {
         loop
         playsInline
         className="border rounded-3xl"
-        src="/clippa.mp4"
+        src="/pd.mp4"
       />
       <div className="fixed inset-0 -z-10 w-full h-full pointer-events-none">
         <RetroGrid className="w-full h-full" />

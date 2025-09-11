@@ -157,6 +157,19 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
+@keyframes grid {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(-40%);
+  }
+}
+
+.animate-grid {
+  animation: grid 15s linear infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
