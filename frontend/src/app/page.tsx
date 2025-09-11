@@ -1,37 +1,72 @@
+"use client";
+import { Button } from "~/components/ui/button";
+import { motion } from "framer-motion";
 import Link from "next/link";
+import RetroGrid from "~/components/ui/retro-grid";
 
-export default function HomePage() {
+const fadeUpVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+};
+
+export default function App() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-      <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-        <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-[5rem]">
-          Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-        </h1>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-          <Link
-            className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 text-white hover:bg-white/20"
-            href="https://create.t3.gg/en/usage/first-steps"
-            target="_blank"
+    <main className="min-h-screen max-w-5xl mx-auto flex flex-col items-center justify-center px-4 md:px-6 lg:px-8 pt-32 pb-12 gap-16">
+      <div className="text-center flex flex-col gap-6 max-w-2xl mx-auto">
+        <div className="text-center flex flex-col gap-2">
+          <motion.h1
+            className={`text-4xl md:text-5xl font-medium tracking-tight`}
+            variants={fadeUpVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ duration: 0.5 }}
           >
-            <h3 className="text-2xl font-bold">First Steps →</h3>
-            <div className="text-lg">
-              Just the basics - Everything you need to know to set up your
-              database and authentication.
-            </div>
-          </Link>
-          <Link
-            className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 text-white hover:bg-white/20"
-            href="https://create.t3.gg/en/introduction"
-            target="_blank"
+            Snip Clips. Make Bangers.
+          </motion.h1>
+
+          <motion.p
+            className="text-secondary-foreground text-lg max-w-md mx-auto"
+            variants={fadeUpVariants}
+            initial="initial"
+            animate="animate"
+            transition={{ duration: 0.5, delay: 0.1 }}
           >
-            <h3 className="text-2xl font-bold">Documentation →</h3>
-            <div className="text-lg">
-              Learn more about Create T3 App, the libraries it uses, and how to
-              deploy it.
-            </div>
-          </Link>
+            Podcast Clipper is your platform for YT clips. Create bangers moments from Podcasts.
+          </motion.p>
         </div>
+
+        <motion.div
+          className="flex gap-2 items-center justify-center"
+          variants={fadeUpVariants}
+          initial="initial"
+          animate="animate"
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <Link href="/dashboard">
+            <Button size="lg">Get started</Button>
+          </Link>
+        </motion.div>
       </div>
+      
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="border rounded-3xl"
+        src="/clippa.mp4"
+      />
+      <div className="fixed inset-0 -z-10 w-full h-full pointer-events-none">
+        <RetroGrid className="w-full h-full" />
+      </div>
+
+
+      <footer className="text-sm text-muted-foreground flex items-center gap-2">
+        <p>© 2025 Podcast Clipper. All rights reserved.</p>
+        <Link href="/terms" className="underline">
+          Terms & Conditions
+        </Link>
+      </footer>
     </main>
   );
 }
