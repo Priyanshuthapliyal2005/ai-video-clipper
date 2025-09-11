@@ -55,7 +55,7 @@ export default function Terms() {
             6. Limitation of Liability
           </h2>
           <p>
-            Our service is provided "as is" without warranties. We are not liable for any damages arising from the use of
+            Our service is provided &quot;as is&quot; without warranties. We are not liable for any damages arising from the use of
             the service to the fullest extent permitted by applicable law.
           </p>
         </div>
