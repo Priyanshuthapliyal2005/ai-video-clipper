@@ -1,5 +1,5 @@
 import "~/styles/globals.css";
-
+import { ThemeProvider } from "~/components/ui/theme-provider";
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
@@ -18,8 +18,13 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable}`}>
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+        <head />
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

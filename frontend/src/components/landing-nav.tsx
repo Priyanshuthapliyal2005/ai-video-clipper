@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "./ui/button";
+import ModeToggle from "./ui/theme-toggle";
 
 export default function LandingNav() {
   return (
@@ -13,6 +14,7 @@ export default function LandingNav() {
         </Link>
 
         <div className="flex items-center gap-3">
+          <ModeToggle />
           <Link href="/login" className="text-sm text-muted-foreground underline">
             Sign in
           </Link>

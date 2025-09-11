@@ -5,6 +5,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "./ui/avatar";
+import ModeToggle from "./ui/theme-toggle";
 import { signOut } from "next-auth/react";
 
 
@@ -37,6 +38,7 @@ const NavHeader = ({credits,email}: {credits:number; email: string}) => {
                                 Buy More
                             </Link>
                         </Button>
+                        <ModeToggle />
                     </div>
 
                     <DropdownMenu>

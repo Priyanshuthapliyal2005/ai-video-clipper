@@ -2,7 +2,7 @@
 import { Button } from "~/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import RetroGrid from "~/components/ui/retro-grid";
+import { RetroGrid } from "~/components/ui/retro-grid";
 import LandingNav from "~/components/landing-nav";
 
 const fadeUpVariants = {
@@ -59,7 +59,13 @@ export default function App() {
         src="/pd.mp4"
       />
       <div className="fixed inset-0 -z-10 w-full h-full pointer-events-none">
-        <RetroGrid className="w-full h-full" />
+        <RetroGrid 
+        angle={65}
+        cellSize={60}
+        opacity={0.9}
+        lightLineColor="#00ff41"
+        darkLineColor="#32CD32"
+      />
       </div>
 
 
