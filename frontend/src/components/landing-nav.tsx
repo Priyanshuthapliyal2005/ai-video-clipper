@@ -15,7 +15,7 @@ export default function LandingNav() {
 
         <div className="flex items-center gap-3">
           <ModeToggle />
-          <Link href="/login" className="text-sm text-muted-foreground underline">
+          <Link href="/login" className="text-sm underline text-foreground dark:text-foreground">
             Sign in
           </Link>
 

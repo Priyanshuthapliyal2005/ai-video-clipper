@@ -2,7 +2,7 @@
 import { Button } from "~/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { RetroGrid } from "~/components/ui/retro-grid";
+import {AuroraBackground} from "~/components/ui/aurora-background";
 import LandingNav from "~/components/landing-nav";
 
 const fadeUpVariants = {
@@ -59,19 +59,13 @@ export default function App() {
         src="/pd.mp4"
       />
       <div className="fixed inset-0 -z-10 w-full h-full pointer-events-none">
-        <RetroGrid 
-        angle={65}
-        cellSize={60}
-        opacity={0.9}
-        lightLineColor="#00ff41"
-        darkLineColor="#32CD32"
-      />
+        <AuroraBackground showRadialGradient={false} />
       </div>
 
 
-      <footer className="text-sm text-muted-foreground flex items-center gap-2">
+      <footer className="text-sm text-foreground flex items-center gap-2">
         <p>© 2025 Podcast Clipper. All rights reserved.</p>
-        <Link href="/terms" className="underline">
+        <Link href="/terms" className="underline text-foreground">
           Terms & Conditions
         </Link>
       </footer>
