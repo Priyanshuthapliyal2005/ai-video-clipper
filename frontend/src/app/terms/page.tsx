@@ -34,7 +34,7 @@ export default function Terms() {
         <div>
           <h2 className="text-xl font-semibold mb-3">4. Refund Policy</h2>
           <p>
-            Refunds are evaluated on a case-by-case basis. To request a refund, contact support at
+            Refunds are evaluated on a case-by-case basis. To request a refund, contact support at <br />
             <a className="underline" href="mailto:priyanshuthapliyal2005@gmail.com">priyanshuthapliyal2005@gmail.com</a> within
             3 days of purchase.
           </p>
