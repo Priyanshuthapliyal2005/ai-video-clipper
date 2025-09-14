@@ -2,6 +2,7 @@ import glob
 import json
 import pathlib
 import pickle
+import shlex
 import shutil
 import subprocess
 import time
@@ -103,8 +104,8 @@ def create_transcript_chunks(segments: List[Dict], chunk_duration: float = 300, 
         # Move to next chunk (with overlap)
         current_start += chunk_duration - overlap_duration
         
-        # If we're close to the end, make this the last chunk
-        if current_start + chunk_duration >= total_duration:
+        # If we're close to the end, make this the last chunk and break
+        if current_start >= total_duration:
             break
     
     return chunks
@@ -213,11 +214,14 @@ def create_vertical_video(tracks,scores,pyframes_path, pyavi_path, audio_path , 
     if vout:
         vout.release()
         
-        ffmpeg_command = (f"ffmpeg -y -i {temp_video_path} -i {audio_path} "
-                          f"-c:v h264 -preset fast -crf 23 -c:a aac -b:a 128k "
-                          f"{output_path}")
+        # Use safer subprocess call without shell=True
+        ffmpeg_command = [
+            "ffmpeg", "-y", "-i", temp_video_path, "-i", audio_path,
+            "-c:v", "h264", "-preset", "fast", "-crf", "23", 
+            "-c:a", "aac", "-b:a", "128k", output_path
+        ]
         
-        subprocess.run(ffmpeg_command, shell = True , check =True , text = True)
+        subprocess.run(ffmpeg_command, check=True, text=True)
 
 def create_subtitles_with_ffmpeg(transcript_segments: list, clip_start: float, clip_end: float, clip_video_path: str, output_path: str, max_words: int = 5):
     temp_dir = os.path.dirname(output_path)
@@ -300,10 +304,15 @@ def create_subtitles_with_ffmpeg(transcript_segments: list, clip_start: float, c
 
     subs.save(subtitle_path)
 
-    ffmpeg_cmd = (f"ffmpeg -y -i {clip_video_path} -vf \"ass={subtitle_path}\" "
-                  f"-c:v h264 -preset fast -crf 23 {output_path}")
+    # Use safer subprocess call without shell=True
+    ffmpeg_cmd = [
+        "ffmpeg", "-y", "-i", clip_video_path, 
+        "-vf", f"ass={subtitle_path}",
+        "-c:v", "h264", "-preset", "fast", "-crf", "23", 
+        output_path
+    ]
 
-    subprocess.run(ffmpeg_cmd, shell=True, check=True)
+    subprocess.run(ffmpeg_cmd, check=True)
    
 
 def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_time: float, end_time: float, clip_index: int, transcript_segments: list):
@@ -331,21 +340,34 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
     pyavi_path.mkdir(exist_ok= True)
     
     duration = end_time - start_time
-    cut_command = (f"ffmpeg -i {original_video_path} -ss {start_time} -t {duration} "
-                   f"{clip_segment_path}")
-    subprocess.run(cut_command, shell= True, check=True, capture_output=True,text=True)
+    # Use safer subprocess call without shell=True
+    cut_command = [
+        "ffmpeg", "-i", str(original_video_path), 
+        "-ss", str(start_time), "-t", str(duration), 
+        str(clip_segment_path)
+    ]
+    subprocess.run(cut_command, check=True, capture_output=True, text=True)
     
-    extract_cmd = f"ffmpeg -i {clip_segment_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
-    subprocess.run(extract_cmd, shell=True, check=True, capture_output=True)
+    # Use safer subprocess call without shell=True
+    extract_cmd = [
+        "ffmpeg", "-i", str(clip_segment_path), 
+        "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", 
+        str(audio_path)
+    ]
+    subprocess.run(extract_cmd, check=True, capture_output=True)
 
     shutil.copy(clip_segment_path, base_dir / f"{clip_name}.mp4")
     
-    columbia_command = (f"python Columbia_test.py --videoName {clip_name} "
-                        f"--videoFolder {str(base_dir)} "
-                        f"--pretrainModel weight/finetuning_TalkSet.model")
+    # Use safer subprocess call without shell=True
+    columbia_command = [
+        "python", "Columbia_test.py", 
+        "--videoName", clip_name,
+        "--videoFolder", str(base_dir),
+        "--pretrainModel", "weight/finetuning_TalkSet.model"
+    ]
     
     columbia_start_time = time.time()
-    subprocess.run(columbia_command,cwd="/asd",shell=True)
+    subprocess.run(columbia_command, cwd="/asd", check=True)
     columbia_end_time = time.time()
     print(
         f"Columbia script completed in {columbia_end_time - columbia_start_time: .2f} seconds")
@@ -404,8 +426,13 @@ class AiPodcastClipper:
         import whisperx
 
         audio_path = base_dir / "audio.wav"
-        extract_cmd = f"ffmpeg -i {video_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
-        subprocess.run(extract_cmd, shell=True, check=True, capture_output=True)
+        # Use safer subprocess call without shell=True
+        extract_cmd = [
+            "ffmpeg", "-i", str(video_path), 
+            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", 
+            str(audio_path)
+        ]
+        subprocess.run(extract_cmd, check=True, capture_output=True)
 
         print("Starting transcriptions with whisperX...")
         start_time = time.time()
@@ -461,7 +488,7 @@ Please adhere to the following rules:
 - Start and end timestamps of the clips should align perfectly with the sentence boundaries in the transcript.
 - Only use the start and end timestamps provided in the input (s/e fields). Modifying timestamps is not allowed.
 - Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{{"start": seconds, "end": seconds}}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
-- Aim to generate longer clips between 40-60 seconds, and ensure to include as much content from the context as viable.
+- Aim to generate longer clips between 45-60 seconds, and ensure to include as much content from the context as viable.
 
 Avoid including:
 - Moments of greeting, thanking, or saying goodbye.
@@ -480,12 +507,23 @@ The transcript chunk is as follows: {optimized_transcript}"""
                 print(f"Warning: Empty response for chunk {chunk_start}-{chunk_end}")
                 return []
             
-            # Clean and parse response
+            # Clean and parse response more robustly
             cleaned_json = response.text.strip()
+            
+            # Remove common markdown wrappers
             if cleaned_json.startswith("```json"):
                 cleaned_json = cleaned_json[len("```json"):].strip()
+            elif cleaned_json.startswith("```"):
+                cleaned_json = cleaned_json[len("```"):].strip()
             if cleaned_json.endswith("```"):
                 cleaned_json = cleaned_json[:-len("```")].strip()
+            
+            # Try to extract JSON if wrapped in other text
+            if not cleaned_json.startswith('['):
+                start = cleaned_json.find('[')
+                end = cleaned_json.rfind(']')
+                if start != -1 and end != -1 and end > start:
+                    cleaned_json = cleaned_json[start:end+1]
             
             try:
                 clips = json.loads(cleaned_json)
@@ -521,7 +559,7 @@ The transcript chunk is as follows: {optimized_transcript}"""
         if not transcript:
             return []
         
-        # Create chunks with sliding windows
+        # Create chunks with sliding windows (use 1200s for fewer API calls)
         chunks = create_transcript_chunks(transcript, chunk_duration=1200, overlap_duration=30)
         print(f"Created {len(chunks)} chunks for processing")
         
@@ -531,7 +569,7 @@ The transcript chunk is as follows: {optimized_transcript}"""
         # Process chunks in parallel
         all_clips = []
         
-        with ThreadPoolExecutor(max_workers=5) as executor:  # Limit concurrent API calls
+        with ThreadPoolExecutor(max_workers=3) as executor:  # Limit concurrent API calls
             future_to_chunk = {
                 executor.submit(self.identify_moments_chunk, chunk_segments, chunk_start, chunk_end): (chunk_start, chunk_end)
                 for chunk_start, chunk_end, chunk_segments in chunks
@@ -558,49 +596,68 @@ The transcript chunk is as follows: {optimized_transcript}"""
         print("Processing Video" + request.s3_key)
         s3_key = request.s3_key
 
-        if token.credentials != os.environ["AUTH_TOKEN"]:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token", headers={"WWW-Authenticate": "Bearer"})
+        # Safer environment variable handling
+        auth_token = os.environ.get("AUTH_TOKEN")
+        if not auth_token:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="AUTH_TOKEN environment variable not configured"
+            )
+            
+        if token.credentials != auth_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid bearer token", 
+                headers={"WWW-Authenticate": "Bearer"}
+            )
 
         run_id = str(uuid.uuid4())
         base_dir = pathlib.Path("/tmp") / run_id
         base_dir.mkdir(parents=True, exist_ok=True)
 
-        # download video file
-        import boto3
+        try:
+            # download video file
+            import boto3
 
-        video_path = base_dir / "input.mp4"
-        s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
-        s3_client.download_file(os.environ.get("S3_BUCKET_NAME", "pd-vd-clips"), s3_key, str(video_path))
-        
-        #1 transcription
-        transcript_segments_json = self.transcribe_video(base_dir, video_path)
-        transcript_segments = json.loads(transcript_segments_json)
-        
-        #2. identify moments for clips
-        print("Identifying clip moments using chunked processing")
-        clip_moments = self.identify_moments(transcript_segments)
-        
-        # Handle case where no moments are identified
-        if not clip_moments:
-            print("No moments identified, skipping clip processing")
-            return {"message": "No clips were generated - no valid moments found"}
-        
-        print(f"Found {len(clip_moments)} clip moments")
-        print(f"Processing first 3 clips to manage execution time")
-        
-        #3. process clips
-        for index , moment in enumerate(clip_moments[:1]):
-            print("Processing Clip" + str(index) + " from " + 
-                  str(moment["start"]) + " to " + str(moment["end"]))
-            process_clip(base_dir, video_path, s3_key, moment["start"], moment["end"], index, transcript_segments)
-        
-        if base_dir.exists():
-            print("Cleaning up temp dir after " + str(base_dir))
-            shutil.rmtree(base_dir, ignore_errors=True)
-        
-        return {
-            "message": "Video processing completed successfully",
-            "clips_found": len(clip_moments),
-            "clips_processed": min(3, len(clip_moments)),
-            "transcription_time": f"{transcript_segments_json is not None}"
-        }
+            video_path = base_dir / "input.mp4"
+            s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+            s3_client.download_file(os.environ.get("S3_BUCKET_NAME", "pd-vd-clips"), s3_key, str(video_path))
+            
+            #1 transcription
+            transcript_start_time = time.time()
+            transcript_segments_json = self.transcribe_video(base_dir, video_path)
+            transcript_segments = json.loads(transcript_segments_json)
+            transcript_duration = time.time() - transcript_start_time
+            
+            #2. identify moments for clips
+            print("Identifying clip moments using chunked processing")
+            clip_moments = self.identify_moments(transcript_segments)
+            
+            # Handle case where no moments are identified
+            if not clip_moments:
+                print("No moments identified, skipping clip processing")
+                return {"message": "No clips were generated - no valid moments found"}
+            
+            print(f"Found {len(clip_moments)} clip moments")
+            print(f"Processing first 3 clips to manage execution time")
+            
+            #3. process clips
+            clips_processed = 0
+            for index , moment in enumerate(clip_moments[:4]): 
+                print("Processing Clip" + str(index) + " from " + 
+                      str(moment["start"]) + " to " + str(moment["end"]))
+                process_clip(base_dir, video_path, s3_key, moment["start"], moment["end"], index, transcript_segments)
+                clips_processed += 1
+            
+            return {
+                "message": "Video processing completed successfully",
+                "clips_found": len(clip_moments),
+                "clips_processed": clips_processed,
+                "transcription_duration_seconds": round(transcript_duration, 2)
+            }
+            
+        finally:
+            # Always cleanup, even if errors occur
+            if base_dir.exists():
+                print("Cleaning up temp dir after " + str(base_dir))
+                shutil.rmtree(base_dir, ignore_errors=True)
