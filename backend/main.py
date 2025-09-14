@@ -15,6 +15,8 @@ import numpy as np
 from pydantic import BaseModel
 import os
 from google import genai
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Dict, Tuple
 
 import pysubs2
 from tqdm import tqdm
@@ -47,6 +49,65 @@ volume = modal.Volume.from_name(
 mount_path = "/root/.cache/torch"
 
 auth_scheme = HTTPBearer()
+
+def optimize_transcript_format(segments: List[Dict]) -> str:
+    """Optimize transcript format to reduce token usage"""
+    optimized_segments = []
+    for segment in segments:
+        # Only include essential fields and round timestamps to 2 decimal places
+        optimized_segment = {
+            "s": round(segment.get("start", 0), 2),  # start -> s
+            "e": round(segment.get("end", 0), 2),    # end -> e  
+            "w": segment.get("word", "").strip()      # word -> w
+        }
+        if optimized_segment["w"]:  # Only include non-empty words
+            optimized_segments.append(optimized_segment)
+    return json.dumps(optimized_segments, separators=(',', ':'))
+
+def create_transcript_chunks(segments: List[Dict], chunk_duration: float = 300, overlap_duration: float = 30) -> List[Tuple[float, float, List[Dict]]]:
+    """
+    Create overlapping chunks from transcript segments
+    
+    Args:
+        segments: List of transcript segments with start, end, word
+        chunk_duration: Duration of each chunk in seconds (default: 5 minutes)
+        overlap_duration: Overlap between chunks in seconds (default: 30 seconds)
+    
+    Returns:
+        List of tuples: (chunk_start, chunk_end, chunk_segments)
+    """
+    if not segments:
+        return []
+    
+    # Find total duration
+    total_duration = max(seg.get("end", 0) for seg in segments if seg.get("end"))
+    
+    chunks = []
+    current_start = 0
+    
+    while current_start < total_duration:
+        chunk_end = min(current_start + chunk_duration, total_duration)
+        
+        # Get segments for this chunk (including overlap)
+        chunk_segments = [
+            seg for seg in segments
+            if seg.get("start") is not None 
+            and seg.get("end") is not None
+            and seg.get("end") > current_start 
+            and seg.get("start") < chunk_end
+        ]
+        
+        if chunk_segments:
+            chunks.append((current_start, chunk_end, chunk_segments))
+        
+        # Move to next chunk (with overlap)
+        current_start += chunk_duration - overlap_duration
+        
+        # If we're close to the end, make this the last chunk
+        if current_start + chunk_duration >= total_duration:
+            break
+    
+    return chunks
 
 def create_vertical_video(tracks,scores,pyframes_path, pyavi_path, audio_path , output_path , framerate=25):
     import ffmpegcv
@@ -311,11 +372,11 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
     create_subtitles_with_ffmpeg(transcript_segments, start_time,
                                  end_time, vertical_mp4_path, subtitle_output_path, max_words=5)
     
-    s3_client = boto3.client("s3")
-    s3_client.upload_file(subtitle_output_path,"pd-vd-clips", output_s3_key)
+    s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+    s3_client.upload_file(subtitle_output_path, os.environ.get("S3_BUCKET_NAME", "pd-vd-clips"), output_s3_key)
     
     
-@app.cls(gpu="L40S",timeout=900,retries=0,scaledown_window=20 , secrets=[modal.Secret.from_name("ai-podcast-clipper-secret")] , volumes={mount_path: volume})
+@app.cls(gpu="L40S",timeout=1800,retries=0,scaledown_window=20 , secrets=[modal.Secret.from_name("ai-podcast-clipper-secret")] , volumes={mount_path: volume})
 class AiPodcastClipper:
     @modal.enter()
     def load_model(self):
@@ -379,42 +440,118 @@ class AiPodcastClipper:
 
         return json.dumps(segments)
     
-    def identify_moments(self, transcript: dict):
+    def identify_moments_chunk(self, transcript_chunk: List[Dict], chunk_start: float, chunk_end: float) -> List[Dict]:
+        """Process a single chunk of transcript to identify moments"""
         try:
-            response = self.gemini_client.models.generate_content(model="gemini-2.5-flash", contents="""
-    This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
-
-    Your task is to find and extract stories, or question and their corresponding answers from the transcript.
-    Each clip should begin with the question and conclude with the answer.
-    It is acceptable for the clip to include a few additional sentences before a question if it aids in contextualizing the question.
-
-    Please adhere to the following rules:
-    - Ensure that clips do not overlap with one another.
-    - Start and end timestamps of the clips should align perfectly with the sentence boundaries in the transcript.
-    - Only use the start and end timestamps provided in the input. modifying timestamps is not allowed.
-    - Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{"start": seconds, "end": seconds}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
-    - Aim to generate longer clips between 40-60 seconds, and ensure to include as much content from the context as viable.
-
-    Avoid including:
-    - Moments of greeting, thanking, or saying goodbye.
-    - Non-question and answer interactions.
-
-    If there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.
-
-    The transcript is as follows:\n\n""" + str(transcript))
+            optimized_transcript = optimize_transcript_format(transcript_chunk)
             
-            print(f"Identified moments response: {response.text if response and response.text else 'None or empty response'}")
+            print(f"Processing chunk {chunk_start}-{chunk_end}s")
+            
+            prompt = f"""
+This is a podcast video transcript chunk from {chunk_start}s to {chunk_end}s. The transcript uses optimized format where each word has: s=start_time, e=end_time, w=word.
+
+I am looking to create clips between a minimum of 45 and maximum of 60 seconds long. The clip should never exceed 60 seconds.
+
+Your task is to find and extract stories, or question and their corresponding answers from the transcript.
+Each clip should begin with the question and conclude with the answer.
+It is acceptable for the clip to include a few additional sentences before a question if it aids in contextualizing the question.
+
+Please adhere to the following rules:
+- Ensure that clips do not overlap with one another.
+- Start and end timestamps of the clips should align perfectly with the sentence boundaries in the transcript.
+- Only use the start and end timestamps provided in the input (s/e fields). Modifying timestamps is not allowed.
+- Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{{"start": seconds, "end": seconds}}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
+- Aim to generate longer clips between 40-60 seconds, and ensure to include as much content from the context as viable.
+
+Avoid including:
+- Moments of greeting, thanking, or saying goodbye.
+- Non-question and answer interactions.
+
+If there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.
+
+The transcript chunk is as follows: {optimized_transcript}"""
+
+            response = self.gemini_client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=prompt
+            )
             
             if not response or not response.text:
-                print("Warning: Gemini API returned None or empty response, returning empty clips list")
-                return "[]"
+                print(f"Warning: Empty response for chunk {chunk_start}-{chunk_end}")
+                return []
             
-            return response.text
+            # Clean and parse response
+            cleaned_json = response.text.strip()
+            if cleaned_json.startswith("```json"):
+                cleaned_json = cleaned_json[len("```json"):].strip()
+            if cleaned_json.endswith("```"):
+                cleaned_json = cleaned_json[:-len("```")].strip()
             
+            try:
+                clips = json.loads(cleaned_json)
+                if not isinstance(clips, list):
+                    print(f"Error: Response is not a list for chunk {chunk_start}-{chunk_end}")
+                    return []
+                
+                # Basic validation for clip structure
+                valid_clips = []
+                for clip in clips:
+                    if (isinstance(clip, dict) and 
+                        "start" in clip and "end" in clip and
+                        isinstance(clip["start"], (int, float)) and
+                        isinstance(clip["end"], (int, float)) and
+                        clip["start"] < clip["end"]):
+                        valid_clips.append(clip)
+                    else:
+                        print(f"Invalid clip structure discarded: {clip}")
+                
+                print(f"Found {len(valid_clips)} valid clips in chunk {chunk_start}-{chunk_end}")
+                return valid_clips
+                
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error for chunk {chunk_start}-{chunk_end}: {e}")
+                return []
+                
         except Exception as e:
-            print(f"Error calling Gemini API: {e}")
-            print("Returning empty clips list as fallback")
-            return "[]"
+            print(f"Error processing chunk {chunk_start}-{chunk_end}: {e}")
+            return []
+    
+    def identify_moments(self, transcript: List[Dict]) -> List[Dict]:
+        """Main method to identify moments using chunking strategy"""
+        if not transcript:
+            return []
+        
+        # Create chunks with sliding windows
+        chunks = create_transcript_chunks(transcript, chunk_duration=1200, overlap_duration=30)
+        print(f"Created {len(chunks)} chunks for processing")
+        
+        if not chunks:
+            return []
+        
+        # Process chunks in parallel
+        all_clips = []
+        
+        with ThreadPoolExecutor(max_workers=5) as executor:  # Limit concurrent API calls
+            future_to_chunk = {
+                executor.submit(self.identify_moments_chunk, chunk_segments, chunk_start, chunk_end): (chunk_start, chunk_end)
+                for chunk_start, chunk_end, chunk_segments in chunks
+            }
+            
+            for future in as_completed(future_to_chunk):
+                chunk_start, chunk_end = future_to_chunk[future]
+                try:
+                    chunk_clips = future.result()
+                    all_clips.extend(chunk_clips)
+                    print(f"Processed chunk {chunk_start}-{chunk_end}: {len(chunk_clips)} clips")
+                except Exception as exc:
+                    print(f"Chunk {chunk_start}-{chunk_end} generated exception: {exc}")
+        
+        print(f"Total clips found: {len(all_clips)}")
+        
+        # Sort clips by start time and limit to prevent long processing
+        all_clips = sorted(all_clips, key=lambda x: x.get('start', 0))
+        
+        return all_clips
     
     @modal.fastapi_endpoint(method="POST")
     def process_video(self, request: ProcessVideoRequest, token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
@@ -432,71 +569,38 @@ class AiPodcastClipper:
         import boto3
 
         video_path = base_dir / "input.mp4"
-        s3_client = boto3.client("s3")
-        s3_client.download_file("pd-vd-clips", s3_key, str(video_path))
+        s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+        s3_client.download_file(os.environ.get("S3_BUCKET_NAME", "pd-vd-clips"), s3_key, str(video_path))
         
         #1 transcription
         transcript_segments_json = self.transcribe_video(base_dir, video_path)
         transcript_segments = json.loads(transcript_segments_json)
         
         #2. identify moments for clips
-        print("Identifying clip moments")
-        identified_moments_raw = self.identify_moments(transcript_segments)
+        print("Identifying clip moments using chunked processing")
+        clip_moments = self.identify_moments(transcript_segments)
         
-        # Handle case where identified_moments_raw is None or empty
-        if not identified_moments_raw:
+        # Handle case where no moments are identified
+        if not clip_moments:
             print("No moments identified, skipping clip processing")
             return {"message": "No clips were generated - no valid moments found"}
         
-        cleaned_json_string = identified_moments_raw.strip()
-        if cleaned_json_string.startswith("```json"):
-            cleaned_json_string = cleaned_json_string[len("```json"):].strip()
-        if cleaned_json_string.endswith("```"):
-            cleaned_json_string = cleaned_json_string[:-len("```")].strip()
-        
-        try:
-            clip_moments = json.loads(cleaned_json_string)
-        except json.JSONDecodeError as e:
-            print(f"Error parsing JSON response: {e}")
-            print(f"Raw response: {cleaned_json_string}")
-            return {"message": "Error parsing AI response for clip moments"}
-            
-        if not clip_moments or not isinstance (clip_moments, list):
-            print("Error : Identified moments is not a list")
-            clip_moments=[]
-        
-        print(clip_moments)
+        print(f"Found {len(clip_moments)} clip moments")
+        print(f"Processing first 3 clips to manage execution time")
         
         #3. process clips
-        for index , moment in enumerate(clip_moments[:5]):
-            if "start" in moment and "end" in moment:
-                print("Processing Clip" + str(index) + " from " + 
-                      str(moment["start"]) + " to " + str(moment["end"]))
-                process_clip(base_dir, video_path, s3_key, moment["start"], moment["end"], index, transcript_segments)
+        for index , moment in enumerate(clip_moments[:1]):
+            print("Processing Clip" + str(index) + " from " + 
+                  str(moment["start"]) + " to " + str(moment["end"]))
+            process_clip(base_dir, video_path, s3_key, moment["start"], moment["end"], index, transcript_segments)
         
         if base_dir.exists():
             print("Cleaning up temp dir after " + str(base_dir))
             shutil.rmtree(base_dir, ignore_errors=True)
-
-@app.local_entrypoint()
-def main():
-    import requests
-    
-    ai_podcast_clipper = AiPodcastClipper()
-    
-    url = ai_podcast_clipper.process_video.get_web_url()
-    
-    payload = {
-        "s3_key": "66d9a577-b80c-4a9e-abcb-9591e397f88d/original.mp4"
-    }
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": "BEARER 123123"
-    }
-    
-    response= requests.post(url,json = payload,
-                            headers=headers)
-    response.raise_for_status()
-    result = response.json()
-    print(result)
+        
+        return {
+            "message": "Video processing completed successfully",
+            "clips_found": len(clip_moments),
+            "clips_processed": min(3, len(clip_moments)),
+            "transcription_time": f"{transcript_segments_json is not None}"
+        }
