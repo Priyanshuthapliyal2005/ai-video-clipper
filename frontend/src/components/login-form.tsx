@@ -48,7 +48,8 @@ export function LoginForm({
 
       if (signInResult?.error) {
         setError("Invalid email or password.");
-      } else {
+      } else if (signInResult?.ok) {
+        // Only redirect after successful sign-in
         router.push("/dashboard");
       }
     } catch (error) {

@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { DashboardClient } from "~/components/dashboard-client";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -8,12 +7,10 @@ import { db } from "~/server/db";
 export default async function DashboardPage() {
   const session = await auth();
 
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
+  const userId = session!.user!.id;
 
   const userData = await db.user.findUniqueOrThrow({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: {
       uploadedFiles: {
         where: {
