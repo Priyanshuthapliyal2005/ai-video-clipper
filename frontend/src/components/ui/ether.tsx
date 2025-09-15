@@ -197,7 +197,7 @@ export default function LiquidEther({
           // mouseenter/leave aren't available on window; listen for pointerenter/leave on container when possible
           container.addEventListener('pointerenter', this._onMouseEnter);
           container.addEventListener('pointerleave', this._onMouseLeave);
-        } catch (e) {
+        } catch {
           // Fallback to container listeners if global attach fails
           container.addEventListener('mousemove', this._onMouseMove);
           container.addEventListener('touchstart', this._onTouchStart, { passive: true });
@@ -214,7 +214,7 @@ export default function LiquidEther({
           window.removeEventListener('touchstart', this._onTouchStart as EventListener);
           window.removeEventListener('touchmove', this._onTouchMove as EventListener);
           window.removeEventListener('touchend', this._onTouchEnd as EventListener);
-        } catch (e) {
+        } catch {
           /* noop */
         }
         if (!c) return;
@@ -555,17 +555,26 @@ export default function LiquidEther({
 }
 `;
 
-    type Uniforms = Record<string, { value: any }>;
+    type Uniforms = Record<string, { value: unknown }>;
+
+    interface ShaderPassProps {
+      material?: {
+        uniforms?: Uniforms;
+        [key: string]: unknown;
+      };
+      output?: THREE.WebGLRenderTarget | null;
+      [key: string]: unknown;
+    }
 
     class ShaderPass {
-      props: any;
+      props: ShaderPassProps;
       uniforms?: Uniforms;
       scene: THREE.Scene | null = null;
       camera: THREE.Camera | null = null;
       material: THREE.RawShaderMaterial | null = null;
       geometry: THREE.BufferGeometry | null = null;
       plane: THREE.Mesh | null = null;
-      constructor(props: any) {
+      constructor(props: ShaderPassProps) {
         this.props = props || {};
         this.uniforms = this.props.material?.uniforms;
       }
@@ -605,7 +614,7 @@ export default function LiquidEther({
           },
           output: simProps.dst
         });
-        this.uniforms = this.props.material.uniforms;
+        this.uniforms = this.props.material?.uniforms;
         this.init();
       }
       init() {
@@ -629,9 +638,9 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { dt, isBounce, BFECC } = (args[0] || {}) as { dt?: number; isBounce?: boolean; BFECC?: boolean };
         if (!this.uniforms) return;
-        if (typeof dt === 'number') this.uniforms.dt.value = dt;
+        if (typeof dt === 'number') this.uniforms.dt?.value && (this.uniforms.dt.value = dt);
         if (typeof isBounce === 'boolean') this.line.visible = isBounce;
-        if (typeof BFECC === 'boolean') this.uniforms.isBFECC.value = BFECC;
+        if (typeof BFECC === 'boolean') this.uniforms.isBFECC?.value && (this.uniforms.isBFECC.value = BFECC);
         super.update();
       }
     }
@@ -677,9 +686,9 @@ export default function LiquidEther({
           1 - cursorSizeY - cellScale.y * 2
         );
         const uniforms = (this.mouse.material as THREE.RawShaderMaterial).uniforms;
-        uniforms.force.value.set(forceX, forceY);
-        uniforms.center.value.set(centerX, centerY);
-        uniforms.scale.value.set(cursorSize, cursorSize);
+        uniforms.force?.value.set(forceX, forceY);
+        uniforms.center?.value.set(centerX, centerY);
+        uniforms.scale?.value.set(cursorSize, cursorSize);
         super.update();
       }
     }
@@ -709,7 +718,7 @@ export default function LiquidEther({
         const { viscous, iterations, dt } = (args[0] || {}) as { viscous?: number; iterations?: number; dt?: number };
         if (!this.uniforms) return;
         let fbo_in: any, fbo_out: any;
-        if (typeof viscous === 'number') this.uniforms.v.value = viscous;
+        if (typeof viscous === 'number') this.uniforms.v?.value && (this.uniforms.v.value = viscous);
         const iter = iterations ?? 0;
         for (let i = 0; i < iter; i++) {
           if (i % 2 === 0) {
@@ -719,9 +728,9 @@ export default function LiquidEther({
             fbo_in = this.props.output1;
             fbo_out = this.props.output0;
           }
-          this.uniforms.velocity_new.value = fbo_in.texture;
+          this.uniforms.velocity_new?.value && (this.uniforms.velocity_new.value = fbo_in.texture);
           this.props.output = fbo_out;
-          if (typeof dt === 'number') this.uniforms.dt.value = dt;
+          if (typeof dt === 'number') this.uniforms.dt?.value && (this.uniforms.dt.value = dt);
           super.update();
         }
         return fbo_out;
@@ -748,7 +757,7 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { vel } = (args[0] || {}) as { vel?: any };
         if (this.uniforms && vel) {
-          this.uniforms.velocity.value = vel.texture;
+          this.uniforms.velocity?.value && (this.uniforms.velocity.value = vel.texture);
         }
         super.update();
       }
@@ -814,8 +823,8 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { vel, pressure } = (args[0] || {}) as { vel?: any; pressure?: any };
         if (this.uniforms && vel && pressure) {
-          this.uniforms.velocity.value = vel.texture;
-          this.uniforms.pressure.value = pressure.texture;
+          this.uniforms.velocity?.value && (this.uniforms.velocity.value = vel.texture);
+          this.uniforms.pressure?.value && (this.uniforms.pressure.value = pressure.texture);
         }
         super.update();
       }
@@ -1126,6 +1135,7 @@ export default function LiquidEther({
     const io = new IntersectionObserver(
       entries => {
         const entry = entries[0];
+        if (!entry) return;
         const isVisible = entry.isIntersecting && entry.intersectionRatio > 0;
         isVisibleRef.current = isVisible;
         if (!webglRef.current) return;
