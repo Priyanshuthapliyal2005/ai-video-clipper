@@ -88,7 +88,15 @@ export default function LiquidEther({
     function makePaletteTexture(stops: string[]): THREE.DataTexture {
       let arr: string[];
       if (Array.isArray(stops) && stops.length > 0) {
-        arr = stops.length === 1 ? [stops[0], stops[0]] : stops;
+        // Filter out any undefined values and ensure we have a valid array
+        const validStops = stops.filter((stop): stop is string => typeof stop === 'string');
+        if (validStops.length === 0) {
+          arr = ['#ffffff', '#ffffff'];
+        } else if (validStops.length === 1) {
+          arr = [validStops[0]!, validStops[0]!];
+        } else {
+          arr = validStops;
+        }
       } else {
         arr = ['#ffffff', '#ffffff'];
       }
@@ -265,16 +273,16 @@ export default function LiquidEther({
       onDocumentTouchStart(event: TouchEvent) {
         if (event.touches.length === 1) {
           const t = event.touches[0];
-          if (this.onInteract) this.onInteract();
-          this.setCoords(t.pageX, t.pageY);
+          if (t && this.onInteract) this.onInteract();
+          if (t) this.setCoords(t.pageX, t.pageY);
           this.hasUserControl = true;
         }
       }
       onDocumentTouchMove(event: TouchEvent) {
         if (event.touches.length === 1) {
           const t = event.touches[0];
-          if (this.onInteract) this.onInteract();
-          this.setCoords(t.pageX, t.pageY);
+          if (t && this.onInteract) this.onInteract();
+          if (t) this.setCoords(t.pageX, t.pageY);
         }
       }
       onTouchEnd() {
@@ -794,7 +802,7 @@ export default function LiquidEther({
             p_in = this.props.output1;
             p_out = this.props.output0;
           }
-          if (this.uniforms) this.uniforms.pressure.value = p_in.texture;
+          if (this.uniforms?.pressure?.value) this.uniforms.pressure.value = p_in.texture;
           this.props.output = p_out;
           super.update();
         }
