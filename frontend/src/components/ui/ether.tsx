@@ -638,9 +638,9 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { dt, isBounce, BFECC } = (args[0] || {}) as { dt?: number; isBounce?: boolean; BFECC?: boolean };
         if (!this.uniforms) return;
-        if (typeof dt === 'number') this.uniforms.dt?.value && (this.uniforms.dt.value = dt);
+        if (typeof dt === 'number' && this.uniforms.dt?.value) this.uniforms.dt.value = dt;
         if (typeof isBounce === 'boolean') this.line.visible = isBounce;
-        if (typeof BFECC === 'boolean') this.uniforms.isBFECC?.value && (this.uniforms.isBFECC.value = BFECC);
+        if (typeof BFECC === 'boolean' && this.uniforms.isBFECC?.value) this.uniforms.isBFECC.value = BFECC;
         super.update();
       }
     }
@@ -718,7 +718,7 @@ export default function LiquidEther({
         const { viscous, iterations, dt } = (args[0] || {}) as { viscous?: number; iterations?: number; dt?: number };
         if (!this.uniforms) return;
         let fbo_in: any, fbo_out: any;
-        if (typeof viscous === 'number') this.uniforms.v?.value && (this.uniforms.v.value = viscous);
+        if (typeof viscous === 'number' && this.uniforms.v?.value) this.uniforms.v.value = viscous;
         const iter = iterations ?? 0;
         for (let i = 0; i < iter; i++) {
           if (i % 2 === 0) {
@@ -728,9 +728,9 @@ export default function LiquidEther({
             fbo_in = this.props.output1;
             fbo_out = this.props.output0;
           }
-          this.uniforms.velocity_new?.value && (this.uniforms.velocity_new.value = fbo_in.texture);
+          if (this.uniforms.velocity_new?.value) this.uniforms.velocity_new.value = fbo_in.texture;
           this.props.output = fbo_out;
-          if (typeof dt === 'number') this.uniforms.dt?.value && (this.uniforms.dt.value = dt);
+          if (typeof dt === 'number' && this.uniforms.dt?.value) this.uniforms.dt.value = dt;
           super.update();
         }
         return fbo_out;
@@ -757,7 +757,7 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { vel } = (args[0] || {}) as { vel?: any };
         if (this.uniforms && vel) {
-          this.uniforms.velocity?.value && (this.uniforms.velocity.value = vel.texture);
+          if (this.uniforms.velocity?.value) this.uniforms.velocity.value = vel.texture;
         }
         super.update();
       }
@@ -823,8 +823,8 @@ export default function LiquidEther({
       update(...args: any[]) {
         const { vel, pressure } = (args[0] || {}) as { vel?: any; pressure?: any };
         if (this.uniforms && vel && pressure) {
-          this.uniforms.velocity?.value && (this.uniforms.velocity.value = vel.texture);
-          this.uniforms.pressure?.value && (this.uniforms.pressure.value = pressure.texture);
+          if (this.uniforms.velocity?.value) this.uniforms.velocity.value = vel.texture;
+          if (this.uniforms.pressure?.value) this.uniforms.pressure.value = pressure.texture;
         }
         super.update();
       }
@@ -1086,7 +1086,7 @@ export default function LiquidEther({
           Mouse.dispose();
           if (Common.renderer) {
             const canvas = Common.renderer.domElement;
-            if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+            if (canvas?.parentNode) canvas.parentNode.removeChild(canvas);
             Common.renderer.dispose();
           }
         } catch {

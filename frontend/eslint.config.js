@@ -42,6 +42,7 @@ export default tseslint.config(
       "@typescript-eslint/no-redundant-type-constituents": "off",
       "@typescript-eslint/prefer-nullish-coalescing": "warn",
       "@typescript-eslint/prefer-optional-chain": "warn",
+      "@typescript-eslint/no-unused-expressions": "off",
       "react/no-unknown-property": "off",
     },
   },
