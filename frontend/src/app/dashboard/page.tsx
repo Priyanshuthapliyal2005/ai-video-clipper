@@ -7,7 +7,11 @@ import { db } from "~/server/db";
 export default async function DashboardPage() {
   const session = await auth();
 
-  const userId = session!.user!.id;
+  if (!session?.user?.id) {
+    throw new Error("User not authenticated");
+  }
+
+  const userId = session.user.id;
 
   const userData = await db.user.findUniqueOrThrow({
     where: { id: userId },
