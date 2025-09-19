@@ -21,7 +21,7 @@ export default function RootLayout({
   <html lang="en" suppressHydrationWarning className={geist.variable}>
         <head />
       <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
         </ThemeProvider>
       </body>
